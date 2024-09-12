@@ -17,8 +17,8 @@
   },
   "content_scripts": [
     {
-      "css": ["src/css/whatsapp.css", "dist/styles.css"],
-      "js": ["dist/whatsapp.js"],
+      "css": ["src/css/facebook.css", "dist/styles.css"],
+      "js": ["dist/facebook.js"],
       "matches": ["https://www.facebook.com/*"]
     }
   ],

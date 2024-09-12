@@ -9,7 +9,7 @@ module.exports = {
 
   entry: {
     background: './src/background.js',
-    whatsapp: './src/whatsapp.js',
+    facebook: './src/facebook.js',
     styles: './src/css/index.css',
   },
 
@@ -34,7 +34,6 @@ module.exports = {
         use: [
           MiniCssExtractPlugin.loader,
           'css-loader',
-          'postcss-loader' // Add postcss-loader to process Tailwind CSS
         ],
       },
       {
