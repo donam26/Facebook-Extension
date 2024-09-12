@@ -161,9 +161,11 @@ function writeCommentAndClosePopup() {
                 );
 
                 const checkInterval = setInterval(() => {
-                  const sendButton = document.querySelector(
+                  const sendButton = popupDiv.querySelector(
                     '[aria-label="Bình luận"]'
                   );
+                  console.log(popupDiv)
+                  console.log(sendButton)
 
                   if (sendButton) {
                     const clickEvent = new MouseEvent("click", {
