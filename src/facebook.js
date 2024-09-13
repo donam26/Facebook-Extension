@@ -1,7 +1,6 @@
 let keywords = [];
 let scrolling = false;
-let shouldStopAfterCurrentTask = false; // New flag to indicate stop after the current task
-let scrollInterval = null; // Store scroll interval globally
+let isCommenting = false; // Flag to track if a comment action is in progress
 
 function checkFeel() {
   window.focus(); // Ensure the main window is focused
@@ -9,27 +8,22 @@ function checkFeel() {
 
   if (targetDiv) {
     scrolling = true;
-    scrollInterval = setInterval(() => {
-      if (!scrolling) { // Stop scrolling if the stop flag is set
-        clearInterval(scrollInterval);
+    let scrollInterval = setInterval(() => {
+      if (!scrolling) {
         console.log("Scrolling stopped.");
-        shouldStopAfterCurrentTask = true; // Set the flag to stop after the current task
+        clearInterval(scrollInterval);
         return;
       }
 
-      const commentButtons = document.querySelectorAll(
-        '[aria-label="Viết bình luận"]'
-      );
-      let clicked = false;
+      const commentButtons = document.querySelectorAll('[aria-label="Viết bình luận"]');
 
       commentButtons.forEach((button) => {
-        if (
-          isElementInViewport(button) &&
-          !button.hasAttribute("data-clicked")
-        ) {
+        // Check if a comment action is already in progress
+        if (isElementInViewport(button) && !button.hasAttribute("data-clicked") && !isCommenting) {
           button.click();
           button.setAttribute("data-clicked", "true");
-          clicked = true;
+
+          isCommenting = true; // Set the flag to indicate a comment action is in progress
 
           setTimeout(() => {
             writeCommentAndClosePopup();
@@ -37,15 +31,14 @@ function checkFeel() {
         }
       });
 
-      if (
-        targetDiv.scrollTop + targetDiv.clientHeight >=
-        targetDiv.scrollHeight
-      ) {
-        clearInterval(scrollInterval);
+      if (targetDiv.scrollTop + targetDiv.clientHeight >= targetDiv.scrollHeight) {
+        setTimeout(() => {
+          targetDiv.scrollTop += 100;
+        }, 1000);
       } else {
         targetDiv.scrollTop += 100;
       }
-    }, 20);
+    }, 100); // Adjusted interval for better performance
   } else {
     console.log("Không tìm thấy thẻ với class đã chỉ định.");
   }
@@ -64,8 +57,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     checkFeel();
   } else if (request.action === "stop") {
-    scrolling = false; // Set scrolling to false to stop scrolling
-    shouldStopAfterCurrentTask = true; // Ensure the extension stops after the current task
+    scrolling = false;
     console.log("Scrolling stopped.");
   }
 });
@@ -76,8 +68,7 @@ function isElementInViewport(el) {
   return (
     rect.top >= 0 &&
     rect.left >= 0 &&
-    rect.bottom <=
-      (window.innerHeight || document.documentElement.clientHeight) &&
+    rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
     rect.right <= (window.innerWidth || document.documentElement.clientWidth)
   );
 }
@@ -138,7 +129,7 @@ function writeCommentAndClosePopup() {
             );
 
             if (divInputComment) {
-              clearInterval(checkCommentBoxInterval); // Stop checking once input box is found
+              clearInterval(checkCommentBoxInterval);
 
               const potentialCommentBoxes = divInputComment.querySelectorAll(
                 ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
@@ -160,12 +151,11 @@ function writeCommentAndClosePopup() {
                   new Event("input", { bubbles: true })
                 );
 
-                const checkInterval = setInterval(() => {
+                // Find and click the send button
+                const checkSendButtonInterval = setInterval(() => {
                   const sendButton = popupDiv.querySelector(
                     '[aria-label="Bình luận"]'
                   );
-                  console.log(popupDiv)
-                  console.log(sendButton)
 
                   if (sendButton) {
                     const clickEvent = new MouseEvent("click", {
@@ -177,20 +167,16 @@ function writeCommentAndClosePopup() {
                     sendButton.dispatchEvent(clickEvent);
                     console.log("Đã nhấn vào nút gửi bình luận.");
 
-                    clearInterval(checkInterval);
+                    clearInterval(checkSendButtonInterval);
 
+                    // After clicking, wait for a moment before closing the popup
                     setTimeout(() => {
-                      if (shouldStopAfterCurrentTask) {
-                        scrolling = false; // Stop scrolling after the current task
-                        console.log("Stopped after the current task.");
-                      } else {
-                        closePopupIfPresent();
-                      }
-                    }, 1000);
+                      closePopupIfPresent();
+                    }, 1000); // Adjust the time if needed
                   } else {
                     retryCount++;
                     if (retryCount >= maxRetries) {
-                      clearInterval(checkInterval);
+                      clearInterval(checkSendButtonInterval);
                       console.log(
                         "Không tìm thấy nút gửi bình luận sau nhiều lần thử."
                       );
@@ -209,13 +195,13 @@ function writeCommentAndClosePopup() {
                 );
               }
             }
-          }, 500); // Check every 500ms for the input box to appear
+          }, 500);
         } else {
           closePopupIfPresent();
         }
       });
     }
-  }, 500); // Check every 500ms for the popup to appear
+  }, 500);
 }
 
 // Function to check if an element is visible
@@ -229,16 +215,11 @@ function isElementVisible(element) {
 
 // Function to close popup if present
 function closePopupIfPresent() {
-  const closeButton = document.querySelector(
-    '[aria-label="Đóng"], [aria-label="Close"]'
-  ); // Check both "Đóng" and "Close"
+  const closeButton = document.querySelector('[aria-label="Đóng"], [aria-label="Close"]');
   if (closeButton) {
-    closeButton.click(); // Click the close button
+    closeButton.click();
     console.log("Đã đóng popup.");
-    // Only call checkFeel() if the stop flag is not set
-    if (!shouldStopAfterCurrentTask) {
-      checkFeel();
-    }
+    isCommenting = false; // Reset the flag after comment action is complete
   } else {
     console.log("Không tìm thấy nút đóng popup.");
   }
