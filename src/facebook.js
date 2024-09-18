@@ -3,12 +3,12 @@ let timeDelay = 1000;
 let scrolling = false;
 let isCommenting = false; // Flag to track if a comment action is in progress
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   // Restore stored values from chrome.storage.local or default values
   // chrome.storage.local.get(['keywords', 'comment', 'numberComment', 'timeDelay'], (result) => {
-    chrome.storage.local.get(['keywords', 'comment', 'timeDelay'], (result) => {
+  chrome.storage.local.get(["keywords", "comment", "timeDelay"], (result) => {
     if (result.keywords) {
-      document.getElementById("keyword").value = result.keywords.join('; ');
+      document.getElementById("keyword").value = result.keywords.join("; ");
     }
     if (result.comment) {
       document.getElementById("comment").value = result.comment;
@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById("timeDelay").value = result.timeDelay;
     }
   });
-
 });
 
 function checkFeel() {
@@ -33,11 +32,17 @@ function checkFeel() {
         return;
       }
 
-      const commentButtons = document.querySelectorAll('[aria-label="Viết bình luận"]');
+      const commentButtons = document.querySelectorAll(
+        '[aria-label="Viết bình luận"]'
+      );
 
       commentButtons.forEach((button) => {
         // Check if a comment action is already in progress
-        if (isElementInViewport(button) && !button.hasAttribute("data-clicked") && !isCommenting) {
+        if (
+          isElementInViewport(button) &&
+          !button.hasAttribute("data-clicked") &&
+          !isCommenting
+        ) {
           button.click();
           button.setAttribute("data-clicked", "true");
 
@@ -49,7 +54,10 @@ function checkFeel() {
         }
       });
 
-      if (targetDiv.scrollTop + targetDiv.clientHeight >= targetDiv.scrollHeight) {
+      if (
+        targetDiv.scrollTop + targetDiv.clientHeight >=
+        targetDiv.scrollHeight
+      ) {
         setTimeout(() => {
           targetDiv.scrollTop += 100;
         }, 1000);
@@ -68,7 +76,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const comment = request.comment;
     const timeComment = request.timeDelay;
     keywords = inputValue.split(";").map((item) => item.trim());
-    timeDelay = timeComment
+    timeDelay = timeComment;
     chrome.storage.local.set({ keywords }, () => {});
     chrome.storage.local.set({ comment }, () => {});
     chrome.storage.local.set({ timeDelay }, () => {});
@@ -91,7 +99,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
 
     // Scroll về đầu trang
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 
@@ -101,7 +109,8 @@ function isElementInViewport(el) {
   return (
     rect.top >= 0 &&
     rect.left >= 0 &&
-    rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+    rect.bottom <=
+      (window.innerHeight || document.documentElement.clientHeight) &&
     rect.right <= (window.innerWidth || document.documentElement.clientWidth)
   );
 }
@@ -109,7 +118,7 @@ function isElementInViewport(el) {
 // Function to generate a spun comment using spin content
 function spinContent(text) {
   return text.replace(/\{(.+?)\}/g, (match, p1) => {
-    const options = p1.split('|');
+    const options = p1.split("|");
     return options[Math.floor(Math.random() * options.length)];
   });
 }
@@ -233,6 +242,22 @@ function writeCommentAndClosePopup() {
           closePopupIfPresent();
         }
       });
+    } else {
+      const directCommentFields = document.querySelectorAll(
+        ".x9f619.x1n2onr6.x1ja2u2z.x78zum5.xdt5ytf.x2lah0s.x193iq5w.x1swvt13.x1pi30zi"
+      );
+
+      for (const field of directCommentFields) {
+        console.log(field);
+        if (
+          isElementVisible(field) &&
+          field.querySelector(".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate")
+        ) {
+          return field.querySelector(
+            ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
+          );
+        }
+      }
     }
   }, 500);
 }
@@ -248,7 +273,9 @@ function isElementVisible(element) {
 
 // Function to close popup if present
 function closePopupIfPresent() {
-  const closeButton = document.querySelector('[aria-label="Đóng"], [aria-label="Close"]');
+  const closeButton = document.querySelector(
+    '[aria-label="Đóng"], [aria-label="Close"]'
+  );
   if (closeButton) {
     closeButton.click();
     console.log("Đã đóng popup.");
