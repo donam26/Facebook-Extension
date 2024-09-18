@@ -219,8 +219,9 @@ function closePopupIfPresent() {
   if (closeButton) {
     closeButton.click();
     console.log("Đã đóng popup.");
-    isCommenting = false; // Reset the flag after comment action is complete
   } else {
     console.log("Không tìm thấy nút đóng popup.");
   }
+
+  isCommenting = false; // Reset the flag after comment action is complete
 }
