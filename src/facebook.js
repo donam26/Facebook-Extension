@@ -1,18 +1,17 @@
 let keywords = [];
+let timeDelay = 1000;
 let scrolling = false;
 let isCommenting = false; // Flag to track if a comment action is in progress
 
 document.addEventListener('DOMContentLoaded', () => {
   // Restore stored values from chrome.storage.local or default values
-  chrome.storage.local.get(['keywords', 'comment', 'numberComment', 'timeDelay'], (result) => {
+  // chrome.storage.local.get(['keywords', 'comment', 'numberComment', 'timeDelay'], (result) => {
+    chrome.storage.local.get(['keywords', 'comment', 'timeDelay'], (result) => {
     if (result.keywords) {
       document.getElementById("keyword").value = result.keywords.join('; ');
     }
     if (result.comment) {
       document.getElementById("comment").value = result.comment;
-    }
-    if (result.numberComment) {
-      document.getElementById("numberComment").value = result.numberComment;
     }
     if (result.timeDelay) {
       document.getElementById("timeDelay").value = result.timeDelay;
@@ -46,7 +45,7 @@ function checkFeel() {
 
           setTimeout(() => {
             writeCommentAndClosePopup();
-          }, 1000);
+          }, timeDelay);
         }
       });
 
@@ -67,9 +66,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "showAlert") {
     const inputValue = request.keyword;
     const comment = request.comment;
+    const timeComment = request.timeDelay;
     keywords = inputValue.split(";").map((item) => item.trim());
+    timeDelay = timeComment
     chrome.storage.local.set({ keywords }, () => {});
     chrome.storage.local.set({ comment }, () => {});
+    chrome.storage.local.set({ timeDelay }, () => {});
     if (keywords.length === 0 || keywords.every((keyword) => keyword === "")) {
       alert("Vui lòng nhập keyword!");
       return;
