@@ -2,6 +2,25 @@ let keywords = [];
 let scrolling = false;
 let isCommenting = false; // Flag to track if a comment action is in progress
 
+document.addEventListener('DOMContentLoaded', () => {
+  // Restore stored values from chrome.storage.local or default values
+  chrome.storage.local.get(['keywords', 'comment', 'numberComment', 'timeDelay'], (result) => {
+    if (result.keywords) {
+      document.getElementById("keyword").value = result.keywords.join('; ');
+    }
+    if (result.comment) {
+      document.getElementById("comment").value = result.comment;
+    }
+    if (result.numberComment) {
+      document.getElementById("numberComment").value = result.numberComment;
+    }
+    if (result.timeDelay) {
+      document.getElementById("timeDelay").value = result.timeDelay;
+    }
+  });
+
+});
+
 function checkFeel() {
   window.focus(); // Ensure the main window is focused
   const targetDiv = document.querySelector("#facebook");
@@ -56,9 +75,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
     checkFeel();
-  } else if (request.action === "stop") {
+  } else if (request.action === "pause") {
     scrolling = false;
     console.log("Scrolling stopped.");
+  } else if (request.action === "stop") {
+    // Dừng scrolling
+    scrolling = false;
+    console.log("Scrolling stopped.");
+
+    // Xóa dữ liệu trong chrome.storage.local
+    chrome.storage.local.clear(() => {
+      console.log("Storage cleared.");
+    });
+
+    // Scroll về đầu trang
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 });
 
