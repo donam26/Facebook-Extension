@@ -1,287 +1,176 @@
-let keywords = [];
-let timeDelay = 1000;
-let scrolling = false;
-let isCommenting = false; // Flag to track if a comment action is in progress
-
-document.addEventListener("DOMContentLoaded", () => {
-  // Restore stored values from chrome.storage.local or default values
-  // chrome.storage.local.get(['keywords', 'comment', 'numberComment', 'timeDelay'], (result) => {
-  chrome.storage.local.get(["keywords", "comment", "timeDelay"], (result) => {
-    if (result.keywords) {
-      document.getElementById("keyword").value = result.keywords.join("; ");
-    }
-    if (result.comment) {
-      document.getElementById("comment").value = result.comment;
-    }
-    if (result.timeDelay) {
-      document.getElementById("timeDelay").value = result.timeDelay;
-    }
-  });
-});
-
-function checkFeel() {
-  window.focus(); // Ensure the main window is focused
-  const targetDiv = document.querySelector("#facebook");
-
-  if (targetDiv) {
-    scrolling = true;
-    let scrollInterval = setInterval(() => {
-      if (!scrolling) {
-        console.log("Scrolling stopped.");
-        clearInterval(scrollInterval);
-        return;
-      }
-
-      const commentButtons = document.querySelectorAll(
-        '[aria-label="Viết bình luận"]'
-      );
-
-      commentButtons.forEach((button) => {
-        // Check if a comment action is already in progress
-        if (
-          isElementInViewport(button) &&
-          !button.hasAttribute("data-clicked") &&
-          !isCommenting
-        ) {
-          button.click();
-          button.setAttribute("data-clicked", "true");
-
-          isCommenting = true; // Set the flag to indicate a comment action is in progress
-
-          setTimeout(() => {
-            writeCommentAndClosePopup();
-          }, timeDelay);
-        }
-      });
-
-      if (
-        targetDiv.scrollTop + targetDiv.clientHeight >=
-        targetDiv.scrollHeight
-      ) {
-        setTimeout(() => {
-          targetDiv.scrollTop += 100;
-        }, 1000);
-      } else {
-        targetDiv.scrollTop += 100;
-      }
-    }, 100); // Adjusted interval for better performance
-  } else {
-    console.log("Không tìm thấy thẻ với class đã chỉ định.");
-  }
-}
+let lastPostCount = 0;
+let currentIndex = 0;
+let intervalId = null;
+let isProcessing = false; // Trạng thái để đảm bảo rằng chỉ xử lý một bài viết tại một thời điểm
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "showAlert") {
-    const inputValue = request.keyword;
-    const comment = request.comment;
-    const timeComment = request.timeDelay;
-    keywords = inputValue.split(";").map((item) => item.trim());
-    timeDelay = timeComment;
-    chrome.storage.local.set({ keywords }, () => {});
-    chrome.storage.local.set({ comment }, () => {});
-    chrome.storage.local.set({ timeDelay }, () => {});
-    if (keywords.length === 0 || keywords.every((keyword) => keyword === "")) {
-      alert("Vui lòng nhập keyword!");
-      return;
-    }
-    checkFeel();
+    checkNewPostsContinuously();
   } else if (request.action === "pause") {
-    scrolling = false;
-    console.log("Scrolling stopped.");
-  } else if (request.action === "stop") {
-    // Dừng scrolling
-    scrolling = false;
-    console.log("Scrolling stopped.");
-
-    // Xóa dữ liệu trong chrome.storage.local
-    chrome.storage.local.clear(() => {
-      console.log("Storage cleared.");
-    });
-
-    // Scroll về đầu trang
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    stopScroll();
   }
 });
 
-// Function to check if an element is in the viewport
-function isElementInViewport(el) {
-  const rect = el.getBoundingClientRect();
+function stopScroll() {
+  if (intervalId) {
+    clearInterval(intervalId); // Dừng interval
+    intervalId = null; // Reset giá trị để có thể kiểm tra lại lần sau
+    console.log("Đã tạm dừng quá trình cuộn.");
+  }
+}
+
+function checkNewPostsContinuously() {
+  if (!intervalId) {
+    intervalId = setInterval(async () => {
+      // Nếu đang xử lý thì không tiếp tục xử lý bài viết khác
+      if (isProcessing) return;
+
+      const postElements = document.querySelector(
+        ".x9f619.x193iq5w.x1miatn0.xqmdsaz.x1gan7if.x1xfsgkm div"
+      );
+
+      if (postElements) {
+        const children = postElements.children;
+
+        if (currentIndex < children.length) {
+          const child = children[currentIndex];
+
+          if (isInViewport(child)) {
+            const sendButton = child.querySelector(
+              '[aria-label="Viết bình luận"]'
+            );
+            if (sendButton && !isInViewport(sendButton)) {
+              scrollToButton(sendButton); // Cuộn đến nút bình luận
+            } else if (sendButton) {
+              isProcessing = true; // Bắt đầu xử lý bài viết này
+              
+              const clickEvent = new MouseEvent("click", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+              });
+              sendButton.dispatchEvent(clickEvent);
+
+              // Chờ popup hiện ra và xử lý bình luận
+              setTimeout(async () => {
+                await checkPopup(child);
+                isProcessing = false; // Hoàn thành xử lý bài viết
+              }, 1000);
+              
+              currentIndex++; // Chuyển đến bài viết tiếp theo
+            } else {
+              currentIndex++; // Di chuyển sang bài viết tiếp theo dù không tìm thấy nút
+            }
+          } else {
+            scrollToPost(child); // Cuộn xuống để bài viết hiện lên
+          }
+        } else {
+          console.log("Đã xử lý hết các bài viết.");
+        }
+      } else {
+        console.log("Không phát hiện bài viết mới.");
+      }
+    }, 1000);
+  }
+}
+
+// Kiểm tra nếu phần tử đang trong viewport
+function isInViewport(element) {
+  const rect = element.getBoundingClientRect();
+  const windowHeight =
+    window.innerHeight || document.documentElement.clientHeight;
+  const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+
+  // Kiểm tra nếu một phần của phần tử nằm trong màn hình
   return (
-    rect.top >= 0 &&
-    rect.left >= 0 &&
-    rect.bottom <=
-      (window.innerHeight || document.documentElement.clientHeight) &&
-    rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    rect.top < windowHeight &&
+    rect.bottom > 0 && // Phần trên của phần tử nằm dưới đỉnh màn hình, và phần dưới nằm trên đáy màn hình
+    rect.left < windowWidth &&
+    rect.right > 0 // Phần bên trái của phần tử nằm trong màn hình
   );
 }
 
-// Function to generate a spun comment using spin content
-function spinContent(text) {
-  return text.replace(/\{(.+?)\}/g, (match, p1) => {
-    const options = p1.split("|");
-    return options[Math.floor(Math.random() * options.length)];
+// Cuộn màn hình để hiển thị bài viết
+function scrollToPost(element) {
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// Cuộn màn hình để hiển thị nút bình luận trong bài viết dài
+function scrollToButton(button) {
+  button.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function checkPopup(post) {
+  const popupDiv = document.querySelector(
+    ".x1n2onr6.x1ja2u2z.x1afcbsf.xdt5ytf.x1a2a7pz.x71s49j.x1qjc9v5.xrjkcco.x58fqnu.x1mh14rs.xfkwgsy.x78zum5.x1plvlek.xryxfnj.xcatxm7.xrgej4m"
+  );
+
+  if (popupDiv) {
+    await handleComment(popupDiv); // Xử lý bình luận trong popup
+    await closePopupIfPresent(); // Chờ đến khi popup đóng hoàn toàn
+  } else {
+    console.log("Bình luận trực tiếp");
+    await handleComment(post); // Xử lý bình luận trực tiếp nếu không có popup
+  }
+}
+
+async function closePopupIfPresent() {
+  return new Promise((resolve) => {
+    const closeButton = document.querySelector(
+      '[aria-label="Đóng"], [aria-label="Close"]'
+    );
+    if (closeButton) {
+      closeButton.click();
+      console.log("Đã đóng popup.");
+      setTimeout(resolve, 1000); // Chờ 1 giây để đảm bảo popup đã đóng hoàn toàn
+    } else {
+      console.log("Không tìm thấy nút đóng popup.");
+      resolve();
+    }
   });
 }
 
-function writeCommentAndClosePopup() {
-  const checkPopupInterval = setInterval(() => {
-    const popupDiv = document.querySelector(
-      ".x1n2onr6.x1ja2u2z.x1afcbsf.xdt5ytf.x1a2a7pz.x71s49j.x1qjc9v5.xrjkcco.x58fqnu.x1mh14rs.xfkwgsy.x78zum5.x1plvlek.xryxfnj.xcatxm7.xrgej4m.xh8yej3"
-    );
+async function handleComment(parentBox) {
+  console.log(parentBox);
+  const commentBox = parentBox.querySelector(
+    ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
+  );
 
-    if (popupDiv) {
-      clearInterval(checkPopupInterval);
+  if (commentBox) {
+    commentBox.setAttribute("data-commented", "true");
+    commentBox.innerText = ""; // Xóa nội dung cũ
 
-      const spanParentElements = popupDiv.querySelector(
-        ".x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.xudqn12.x3x7a5m.x6prxxf.xvq8zen.xo1l8bm.xzsf02u.x1yc453h"
-      );
+    // Chờ một khoảng thời gian để chắc chắn rằng input đã được render
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const childSpans = spanParentElements
-        ? spanParentElements.querySelectorAll(":scope > div")
-        : [];
-      let combinedText = "";
+    commentBox.focus(); // Focus vào ô bình luận
+    const spunComment = "This is the spun comment"; 
+    document.execCommand("insertText", false, spunComment);
+    commentBox.dispatchEvent(new Event("input", { bubbles: true })); // Cập nhật nội dung vào ô bình luận
 
-      childSpans.forEach((div) => {
-        combinedText += div.textContent + " "; // Append each text content with a space
-      });
+    await new Promise((resolve) => {
+      const intervalId = setInterval(() => {
+        // Focus lại vào ô comment để đảm bảo nút gửi được render ra
+        commentBox.focus();
+        
+        const sendButton = parentBox.querySelector('[aria-label="Bình luận"]');
+        if (sendButton) {
+          sendButton.focus(); // Focus vào nút gửi để nó sẵn sàng click
+          sendButton.click(); // Click vào nút gửi bình luận
+          console.log("Đã nhấn vào nút gửi bình luận.");
 
-      chrome.storage.local.get(["keywords", "comment"], (result) => {
-        const storedComment = result.comment || "";
-        const spunComment = spinContent(storedComment); // Generate spun content
-        const storedKeywords = result.keywords || [];
+          clearInterval(intervalId); // Dừng việc kiểm tra sau khi đã nhấn nút gửi
 
-        const normalizedCombinedText = combinedText
-          .toLowerCase()
-          .normalize("NFC")
-          .replace(/\s+/g, " ")
-          .trim();
-
-        const keywordFound = storedKeywords.some((keyword) =>
-          normalizedCombinedText.includes(
-            keyword.toLowerCase().normalize("NFC").replace(/\s+/g, " ").trim()
-          )
-        );
-
-        if (keywordFound) {
-          let retryCount = 0;
-          const maxRetries = 20; // Maximum attempts to find the input comment box
-          const checkCommentBoxInterval = setInterval(() => {
-            const divInputComment = popupDiv.querySelector(
-              ".html-div.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x1jx94hy.x190bdop.xp3hrpj.x1ey2m1c.x13xjmei.xv7j57z.xh8yej3"
-            );
-
-            if (divInputComment) {
-              clearInterval(checkCommentBoxInterval);
-
-              const potentialCommentBoxes = divInputComment.querySelectorAll(
-                ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
-              );
-
-              let foundCommentBox = null;
-
-              for (const commentBox of potentialCommentBoxes) {
-                if (commentBox && isElementVisible(commentBox)) {
-                  foundCommentBox = commentBox;
-                  break;
-                }
-              }
-
-              if (foundCommentBox) {
-                foundCommentBox.focus();
-                document.execCommand("insertText", false, spunComment); // Use the spun comment
-                foundCommentBox.dispatchEvent(
-                  new Event("input", { bubbles: true })
-                );
-
-                // Find and click the send button
-                const checkSendButtonInterval = setInterval(() => {
-                  const sendButton = popupDiv.querySelector(
-                    '[aria-label="Bình luận"]'
-                  );
-
-                  if (sendButton) {
-                    const clickEvent = new MouseEvent("click", {
-                      bubbles: true,
-                      cancelable: true,
-                      view: window,
-                    });
-
-                    sendButton.dispatchEvent(clickEvent);
-                    console.log("Đã nhấn vào nút gửi bình luận.");
-
-                    clearInterval(checkSendButtonInterval);
-
-                    // After clicking, wait for a moment before closing the popup
-                    setTimeout(() => {
-                      closePopupIfPresent();
-                    }, 1000); // Adjust the time if needed
-                  } else {
-                    retryCount++;
-                    if (retryCount >= maxRetries) {
-                      clearInterval(checkSendButtonInterval);
-                      console.log(
-                        "Không tìm thấy nút gửi bình luận sau nhiều lần thử."
-                      );
-                    }
-                  }
-                }, 500);
-              } else {
-                console.log("Không tìm thấy ô nhập bình luận trong thẻ div.");
-              }
-            } else {
-              retryCount++;
-              if (retryCount >= maxRetries) {
-                clearInterval(checkCommentBoxInterval);
-                console.log(
-                  "Không tìm thấy thẻ div chứa ô nhập bình luận sau nhiều lần thử."
-                );
-              }
-            }
-          }, 500);
+          setTimeout(() => {
+            console.log("Proceeding to next post...");
+            resolve(); // Kết thúc Promise sau khi hoàn thành bình luận
+          }, 3000); // Thời gian chờ sau khi gửi bình luận
         } else {
-          closePopupIfPresent();
+          console.log("Đang chờ nút gửi bình luận được render...");
         }
-      });
-    } else {
-      const directCommentFields = document.querySelectorAll(
-        ".x9f619.x1n2onr6.x1ja2u2z.x78zum5.xdt5ytf.x2lah0s.x193iq5w.x1swvt13.x1pi30zi"
-      );
-
-      for (const field of directCommentFields) {
-        console.log(field);
-        if (
-          isElementVisible(field) &&
-          field.querySelector(".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate")
-        ) {
-          return field.querySelector(
-            ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
-          );
-        }
-      }
-    }
-  }, 500);
-}
-
-// Function to check if an element is visible
-function isElementVisible(element) {
-  return (
-    element.offsetWidth > 0 &&
-    element.offsetHeight > 0 &&
-    window.getComputedStyle(element).visibility !== "hidden"
-  );
-}
-
-// Function to close popup if present
-function closePopupIfPresent() {
-  const closeButton = document.querySelector(
-    '[aria-label="Đóng"], [aria-label="Close"]'
-  );
-  if (closeButton) {
-    closeButton.click();
-    console.log("Đã đóng popup.");
+      }, 500); // Kiểm tra mỗi 500ms
+    });
   } else {
-    console.log("Không tìm thấy nút đóng popup.");
+    console.log("Không tìm thấy ô nhập bình luận.");
   }
-
-  isCommenting = false; // Reset the flag after comment action is complete
 }
