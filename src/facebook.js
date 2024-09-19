@@ -5,6 +5,7 @@ let isProcessing = false; // Trạng thái để đảm bảo rằng chỉ xử 
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "showAlert") {
+    window.focus(); 
     checkNewPostsContinuously();
   } else if (request.action === "pause") {
     stopScroll();
