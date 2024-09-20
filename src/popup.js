@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       chrome.tabs.sendMessage(tabs[0].id, { action: 'stop' });
     });
+    window.close(); 
   });
 
   document.getElementById('pause').addEventListener('click', () => {
@@ -53,3 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'clearPopup') {
+    // Reset all input fields in the popup
+    document.getElementById('keywordInput').value = '';
+    document.getElementById('commentInput').value = '';
+    document.getElementById('timeDelayInput').value = '';
+    console.log('Popup inputs cleared.');
+  }
+});
+

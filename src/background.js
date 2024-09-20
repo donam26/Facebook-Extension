@@ -20,6 +20,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         target: { tabId: tabId },
         function: stopScrolling
       });
+      chrome.runtime.sendMessage({ action: 'clearPopup' });
+
     }
   });
 });
@@ -39,3 +41,13 @@ function stopScrolling() {
   clearInterval(scrollInterval);
   window.scrollTo(0, 0); // Cuộn về đầu trang
 }
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'clearPopup') {
+    // Reset all input fields in the popup
+    document.getElementById('keywordInput').value = '';
+    document.getElementById('commentInput').value = '';
+    document.getElementById('timeDelayInput').value = '';
+    console.log('Popup inputs cleared.');
+  }
+});

@@ -1,14 +1,39 @@
 let lastPostCount = 0;
 let currentIndex = 0;
 let intervalId = null;
-let isProcessing = false; // Trạng thái để đảm bảo rằng chỉ xử lý một bài viết tại một thời điểm
+let isProcessing = false;
+let keywords = [];
+let timeDelay = 1000;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "showAlert") {
+    const inputValue = request.keyword;
+    const comment = request.comment;
+    const timeComment = request.timeDelay;
+    keywords = inputValue.split(";").map((item) => item.trim());
+    timeDelay = timeComment;
+    chrome.storage.local.set({ keywords }, () => {});
+    chrome.storage.local.set({ comment }, () => {});
+    chrome.storage.local.set({ timeDelay }, () => {});
+    if (keywords.length === 0 || keywords.every((keyword) => keyword === "")) {
+      alert("Vui lòng nhập keyword!");
+      return;
+    }
     window.focus(); 
-    checkNewPostsContinuously();
-  } else if (request.action === "pause") {
+    checkNewPostsContinuously(); 
+   } else if (request.action === "pause") {
     stopScroll();
+  } else if (request.action === "stop") {
+    // Dừng scrolling
+    stopScroll();
+        console.log("Scrolling stopped.");
+    // Xóa dữ liệu trong chrome.storage.local
+    chrome.storage.local.clear(() => {
+      console.log("Storage cleared.");
+    });
+
+    chrome.runtime.sendMessage({ action: 'clearPopup' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 
@@ -20,7 +45,7 @@ function stopScroll() {
   }
 }
 
-function checkNewPostsContinuously() {
+async function checkNewPostsContinuously() {
   if (!intervalId) {
     intervalId = setInterval(async () => {
       // Nếu đang xử lý thì không tiếp tục xử lý bài viết khác
@@ -41,23 +66,29 @@ function checkNewPostsContinuously() {
               '[aria-label="Viết bình luận"]'
             );
             if (sendButton && !isInViewport(sendButton)) {
-              scrollToButton(sendButton); // Cuộn đến nút bình luận
+              scrollToButton(sendButton);
             } else if (sendButton) {
-              isProcessing = true; // Bắt đầu xử lý bài viết này
-              
-              const clickEvent = new MouseEvent("click", {
-                bubbles: true,
-                cancelable: true,
-                view: window,
-              });
-              sendButton.dispatchEvent(clickEvent);
+              isProcessing = true;
 
-              // Chờ popup hiện ra và xử lý bình luận
-              setTimeout(async () => {
-                await checkPopup(child);
-                isProcessing = false; // Hoàn thành xử lý bài viết
-              }, 1000);
-              
+              // Await the keyword check before proceeding
+              const keywordFound = await checkKeyWord(child);
+              if (keywordFound) {
+                const clickEvent = new MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window,
+                });
+                sendButton.dispatchEvent(clickEvent);
+
+                setTimeout(async () => {
+                  await checkPopup(child);
+                  console.log(child);
+                  isProcessing = false; // Hoàn thành xử lý bài viết
+                }, 1000);
+              } else {
+                console.log("Không tìm thấy từ khóa phù hợp trong bài viết.");
+                isProcessing = false; // Không tìm thấy từ khóa, chuyển sang bài viết tiếp theo
+              }
               currentIndex++; // Chuyển đến bài viết tiếp theo
             } else {
               currentIndex++; // Di chuyển sang bài viết tiếp theo dù không tìm thấy nút
@@ -71,9 +102,10 @@ function checkNewPostsContinuously() {
       } else {
         console.log("Không phát hiện bài viết mới.");
       }
-    }, 1000);
+    }, timeDelay);
   }
 }
+
 
 // Kiểm tra nếu phần tử đang trong viewport
 function isInViewport(element) {
@@ -145,7 +177,10 @@ async function handleComment(parentBox) {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     commentBox.focus(); // Focus vào ô bình luận
-    const spunComment = "This is the spun comment"; 
+    const storedComment = await getStoredComment();
+
+    const spunComment = spinContent(storedComment); // Generate spun content
+
     document.execCommand("insertText", false, spunComment);
     commentBox.dispatchEvent(new Event("input", { bubbles: true })); // Cập nhật nội dung vào ô bình luận
 
@@ -174,4 +209,54 @@ async function handleComment(parentBox) {
   } else {
     console.log("Không tìm thấy ô nhập bình luận.");
   }
+}
+
+function spinContent(text) {
+  return text.replace(/\{(.+?)\}/g, (match, p1) => {
+    const options = p1.split("|");
+    return options[Math.floor(Math.random() * options.length)];
+  });
+}
+
+async function checkKeyWord(post) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["keywords"], (result) => {
+      const combinedText = post.innerText || post.textContent || "";
+      const keywords = result.keywords || [];
+
+      // Log the post content and keywords for debugging
+      console.log("Post content:", combinedText);
+      console.log("Keywords:", keywords);
+
+      if (!keywords || keywords.length === 0) {
+        console.log("No keywords provided.");
+        resolve(false);
+        return;
+      }
+
+      const normalizedCombinedText = combinedText
+        .toLowerCase()
+        .normalize("NFC")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const keywordFound = keywords.some((keyword) => {
+        const normalizedKeyword = keyword.toLowerCase().normalize("NFC").trim();
+        const keywordMatch = normalizedCombinedText.includes(normalizedKeyword);
+        console.log(`Checking keyword: "${normalizedKeyword}", Match: ${keywordMatch}`);
+        return keywordMatch;
+      });
+
+      resolve(keywordFound);
+    });
+  });
+}
+
+
+async function getStoredComment() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["comment"], (result) => {
+      resolve(result.comment || "");
+    });
+  });
 }
