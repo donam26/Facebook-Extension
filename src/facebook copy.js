@@ -145,8 +145,37 @@ function scrollToPost(element) {
 function scrollToButton(button) {
   button.scrollIntoView({ behavior: "smooth", block: "center" });
 }
+async function getLink(post){
+   
+  // Find the <a> tag that contains the link to the post
+  const containerLink = post.querySelector('.html-div.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x1q0g3np')
+  const linkElement = containerLink.querySelector('a[attributionsrc]');
 
+  if (linkElement) {
+    let postLink =  linkElement.getAttribute('href');
+    console.log(`Original post link: ${postLink}`);
+
+    // Check if the link is relative (doesn't start with http:// or https://) and prepend Facebook's domain if needed
+    if (postLink && !postLink.startsWith('http://') && !postLink.startsWith('https://')) {
+      postLink = `https://www.facebook.com${postLink}`;
+    }
+
+
+    // Store the post link in chrome.storage.local
+    chrome.storage.local.get({ postLinks: [] }, (result) => {
+      const updatedPostLinks = [...result.postLinks, postLink]; // Add the new post link
+      chrome.storage.local.set({ postLinks: updatedPostLinks }, () => {
+        console.log(`Post link saved: ${postLink}`);
+      });
+    });
+  } else {
+    console.log('No link found for the post.');
+  }
+}
 async function checkPopup(post) {
+  await getLink(post);
+
+  // Continue with the rest of your logic...
   const popupDiv = document.querySelector(
     ".x1n2onr6.x1ja2u2z.x1afcbsf.xdt5ytf.x1a2a7pz.x71s49j.x1qjc9v5.xrjkcco.x58fqnu.x1mh14rs.xfkwgsy.x78zum5.x1plvlek.xryxfnj.xcatxm7.xrgej4m"
   );
@@ -159,6 +188,8 @@ async function checkPopup(post) {
     await handleComment(post); // Handle direct comment if no popup exists
   }
 }
+
+
 
 async function closePopupIfPresent() {
   return new Promise((resolve) => {
@@ -178,74 +209,51 @@ async function closePopupIfPresent() {
 
 async function handleComment(parentBox) {
   console.log(parentBox);
+  const commentBox = parentBox.querySelector(
+    ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
+  );
 
-  const waitForCommentBox = async (parentBox, retries = 5, delay = 500) => {
-    return new Promise((resolve, reject) => {
-      let attempt = 0;
-      const intervalId = setInterval(() => {
-        const commentBox = parentBox.querySelector(
-          ".xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.notranslate"
-        );
-        attempt++;
-        
-        if (commentBox) {
-          clearInterval(intervalId);
-          resolve(commentBox); // Đã tìm thấy ô comment
-        } else if (attempt >= retries) {
-          clearInterval(intervalId);
-          reject(new Error("Không tìm thấy ô nhập bình luận sau khi đợi."));
-        }
-      }, delay);
-    });
-  };
-
-  try {
-    const commentBox = await waitForCommentBox(parentBox);
-
+  if (commentBox) {
     commentBox.setAttribute("data-commented", "true");
     commentBox.innerText = ""; // Xóa nội dung cũ
 
+    // Chờ một khoảng thời gian để chắc chắn rằng input đã được render
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     commentBox.focus(); // Focus vào ô bình luận
     const storedComment = await getStoredComment();
 
-    const spunComment = spinContent(storedComment); // Tạo nội dung bình luận
+    const spunComment = spinContent(storedComment); // Generate spun content
 
     document.execCommand("insertText", false, spunComment);
     commentBox.dispatchEvent(new Event("input", { bubbles: true })); // Cập nhật nội dung vào ô bình luận
 
     await new Promise((resolve) => {
       const intervalId = setInterval(() => {
-        commentBox.focus(); // Đảm bảo nút gửi được render ra
-
+        // Focus lại vào ô comment để đảm bảo nút gửi được render ra
+        commentBox.focus();
+        
         const sendButton = parentBox.querySelector('[aria-label="Bình luận"]');
         if (sendButton) {
-          sendButton.focus();
-          sendButton.click(); // Gửi bình luận
+          sendButton.focus(); // Focus vào nút gửi để nó sẵn sàng click
+          sendButton.click(); // Click vào nút gửi bình luận
           console.log("Đã nhấn vào nút gửi bình luận.");
 
-          clearInterval(intervalId); 
+          clearInterval(intervalId); // Dừng việc kiểm tra sau khi đã nhấn nút gửi
 
           setTimeout(() => {
             console.log("Proceeding to next post...");
-            resolve(); // Kết thúc sau khi hoàn thành bình luận
-          }, 3000); 
+            resolve(); // Kết thúc Promise sau khi hoàn thành bình luận
+          }, 3000); // Thời gian chờ sau khi gửi bình luận
         } else {
           console.log("Đang chờ nút gửi bình luận được render...");
         }
-      }, 500); 
+      }, 500); // Kiểm tra mỗi 500ms
     });
-
-    // Đảm bảo rằng popup được đóng sau khi bình luận được gửi thành công
-    await closePopupIfPresent();
-
-  } catch (error) {
-    console.error(error.message);
+  } else {
+    console.log("Không tìm thấy ô nhập bình luận.");
   }
 }
-
-
 
 function spinContent(text) {
   return text.replace(/\{(.+?)\}/g, (match, p1) => {
@@ -255,14 +263,11 @@ function spinContent(text) {
 }
 
 async function checkKeyWord(post) {
+  console.log(commentCountForCurrentKeyword)
   return new Promise((resolve) => {
     chrome.storage.local.get(["keywords"], (result) => {
       const combinedText = post.innerText || post.textContent || "";
       const keywords = result.keywords || [];
-
-      // Log the post content and keywords for debugging
-      console.log("Post content:", combinedText);
-      console.log("Keywords:", keywords);
 
       if (!keywords || keywords.length === 0) {
         console.log("No keywords provided.");
