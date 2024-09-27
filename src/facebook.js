@@ -69,7 +69,7 @@ async function checkNewPostsContinuously() {
 
           if (isInViewport(child)) {
             const sendButton = child.querySelector(
-              '[aria-label="Viết bình luận"]'
+              '[aria-label="Viết bình luận"], [aria-label="Leave a comment"]'
             );
             if (sendButton && !isInViewport(sendButton)) {
               scrollToButton(sendButton);
